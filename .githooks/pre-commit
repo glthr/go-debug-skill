@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Block commits that modify examples/templates/ unless ALLOW_TEMPLATE_CHANGES=1.
+# Install: make install-hooks
+exec "$(git rev-parse --show-toplevel)/scripts/check-templates-unchanged.sh" --pre-commit

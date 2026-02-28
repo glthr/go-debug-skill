@@ -1,0 +1,75 @@
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,margin=3cm]{geometry}
+\usepackage{amssymb}
+\usepackage{needspace}
+%% Avoid widow/orphan section titles (title alone at bottom or top of page)
+\widowpenalty=10000
+\clubpenalty=10000
+\let\oldsection\section
+\renewcommand{\section}{\needspace{4\baselineskip}\oldsection}
+\let\oldsubsection\subsection
+\renewcommand{\subsection}{\needspace{3\baselineskip}\oldsubsection}
+\let\oldsubsubsection\subsubsection
+\renewcommand{\subsubsection}{\needspace{2\baselineskip}\oldsubsubsection}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage[protrusion=true,expansion=true,final]{microtype}
+\usepackage[final]{minted}
+\usepackage{booktabs,longtable,xcolor,hyperref,parskip,fontawesome5}
+\usepackage[breakable,skins,minted]{tcolorbox}
+\newcommand{\bpsep}{\par\vspace{1.5ex}\noindent\rule{\linewidth}{2pt}\vspace{0.5ex}\par}
+\usemintedstyle{friendly}
+\setminted{
+  bgcolor      = gray!7,
+  fontsize     = \small,
+  breaklines,
+  autogobble,
+  breakanywhere,
+  mathescape   = false,
+  escapeinside = ,
+}
+\setminted[go]{linenos,numbersep=6pt}
+
+%% styles.tex (inlined so preamble is self-contained; rootcausebox, fixbox for colored sections)
+\definecolor{linkblue}{RGB}{0,70,160}
+\definecolor{okbg}{RGB}{220,255,220}
+\definecolor{okframe}{RGB}{0,110,0}
+\definecolor{badbg}{RGB}{255,220,220}
+\definecolor{badframe}{RGB}{150,0,0}
+\tcbset{
+  debugbox/.style={
+    enhanced, breakable,
+    fonttitle = \bfseries,
+    arc       = 2pt,
+    left=6pt, right=6pt, top=4pt, bottom=4pt,
+  }
+}
+\newtcolorbox{obsokbox}{
+  debugbox,
+  colback=okbg, colframe=okframe,
+  title=\faCheckCircle\enspace Observation: correct}
+\newtcolorbox{obsbadbox}{
+  debugbox,
+  colback=badbg, colframe=badframe,
+  title=\faTimes\enspace Observation: wrong}
+\newtcolorbox{rootcausebox}{
+  debugbox,
+  colback=badbg, colframe=badframe,
+  title=\faExclamationTriangle\enspace Root Cause}
+\newtcolorbox{fixbox}{
+  debugbox,
+  colback=okbg, colframe=okframe,
+  title=\faCheckCircle\enspace Fix Applied}
+
+\hypersetup{
+  colorlinks        = true,
+  urlcolor          = linkblue,
+  linkcolor         = linkblue,
+  citecolor         = linkblue,
+  pdfusetitle,
+  pdfsubject        = {Go debugging report},
+  pdfkeywords       = {Go, Delve, debugging},
+  pdfdisplaydoctitle= true,
+  pdfstartview      = FitH,
+  pdflang           = en-US,
+}

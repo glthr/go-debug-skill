@@ -1,0 +1,39 @@
+%% Accessible link color (contrast ratio ~5.5:1 on white)
+\definecolor{linkblue}{RGB}{0,70,160}
+
+%% Colored box palette
+\definecolor{okbg}{RGB}{220,255,220}
+\definecolor{okframe}{RGB}{0,110,0}
+\definecolor{badbg}{RGB}{255,220,220}
+\definecolor{badframe}{RGB}{150,0,0}
+
+%% Shared base style for all debug boxes
+\tcbset{
+  debugbox/.style={
+    enhanced, breakable,
+    fonttitle = \bfseries,
+    arc       = 2pt,
+    left=6pt, right=6pt, top=4pt, bottom=4pt,
+  }
+}
+
+%% Observation environments (prose only — never nest minted inside these)
+\newtcolorbox{obsokbox}{
+  debugbox,
+  colback=okbg, colframe=okframe,
+  title=\faCheckCircle\enspace Observation: correct}
+
+\newtcolorbox{obsbadbox}{
+  debugbox,
+  colback=badbg, colframe=badframe,
+  title=\faTimes\enspace Observation: wrong}
+
+\newtcolorbox{rootcausebox}{
+  debugbox,
+  colback=badbg, colframe=badframe,
+  title=\faExclamationTriangle\enspace Root Cause}
+
+\newtcolorbox{fixbox}{
+  debugbox,
+  colback=okbg, colframe=okframe,
+  title=\faCheckCircle\enspace Fix Applied}

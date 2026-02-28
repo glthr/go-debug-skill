@@ -1,0 +1,338 @@
+---
+{{ .Frontmatter }}
+---
+
+# {{ .Title }}
+
+{{if .PreActionGate}}
+## Pre-action gate — enforce before doing anything else
+
+If the user asked to **debug**, **fix**, **trace**, or **investigate** a program, and the project is Go:
+
+**STOP. Do not:**
+- Read source files and apply a fix directly
+- Run `go test` and deduce the bug from output alone
+- Skip delve-helper because the bug looks obvious from the code or comments
+- Run `dlv` directly (`dlv debug`, `dlv connect`, etc.) — use only `delve-helper` for start, break, continue, print, and all other debugging actions
+
+**DO:**
+- Create the artifact dir (Step 0) and run Steps 0–7 in order
+- Use delve-helper to collect runtime evidence BEFORE applying any fix
+- Produce the PDF at Step 6; the task is **incomplete** until `./.debug_<date>/` exists and `debug_report_*.pdf` is at project root
+
+> **Zero-tolerance rule:** Static analysis alone is never sufficient for a Go debug task. Even if the root cause is visible in source, delve-helper MUST confirm it at runtime. A fix applied without Delve evidence is a protocol violation — treat the task as incomplete and restart from Step 2.
+
+**Before you may edit any source file:** You MUST have already run Step 0 (create `DBG_DIR`, run `delve-helper report-init`), Step 2 (`delve-helper start`), and at least one breakpoint hit with `delve-helper report-evidence` recorded. If you have not done all of that, do **not** apply a fix — run Steps 0–4 first, then Step 5.
+
+---
+
+{{end}}
+{{if .SlashCommand}}
+**Slash command: `/delve`** — When the user message is **`/delve`** or **starts with `/delve`**, treat it as invoking this skill:
+- **`/delve`** alone → detect language, then start the appropriate debugger.
+- **`/delve start`** or **`/delve start ./example`** → start headless Delve for the current package or given path (Go only).
+- **`/delve break main.go:42`** / **`/delve break main.main`** → set breakpoint (session must be running).
+- **`/delve continue`** / **`/delve next`** / **`/delve step`** → control execution.
+- **`/delve print x`** / **`/delve locals`** / **`/delve stack`** → inspect state.
+- **`/delve breakpoints`** / **`/delve clear 1`** → list or clear breakpoints.
+
+---
+
+{{end}}
+**You must run the full 8-step protocol for every Go debug task:** create the artifact dir (Step 0), run `delve-helper start` (Step 2), set breakpoints and collect evidence (Steps 3–4), then and only then apply a fix (Step 5) and generate the PDF (Step 6). Never fix the code based only on reading it or on `go test` output — that skips the protocol.
+
+Detect the project language first, then apply the appropriate debugger. For Go projects, use **delve-helper** (globally installed on PATH). Never use `go run`/`go test` alone when the user wants to inspect execution. **delve-helper is never in the repo** — do not look for it there.
+
+**Do not run `dlv` directly.** Do not use `dlv debug`, `dlv connect`, or any other `dlv` command. Use only **`delve-helper`** for every debugging action: start the session (`delve-helper start`), set breakpoints (`delve-helper break`), continue/step (`delve-helper continue`, `next`, `step`), inspect (`delve-helper print`, `locals`, `args`, `stack`), and stop (`delve-helper stop`).
+
+**The report is managed entirely by `delve-helper report-*` commands. Never write or edit report .md files directly — all report manipulation goes through delve-helper.**
+
+{{if .TriggerConditions}}
+## Trigger conditions — invoke this protocol automatically
+
+Start the 8-step debugging algorithm below for **ANY** of:
+
+- Generic debug request: user says "debug this", "debug this program", "debug this Go program", "run the debugger", "step through this", "what is happening here"
+- Reported bug or incorrect output
+- Crash or panic
+- Wrong/unexpected result
+- Test failure
+- Race condition
+- Performance anomaly or hang
+
+**When the user asks to debug a program (or any of the above):**
+
+1. **Always verify the project language first** — run the Language detection (prerequisite) below; do not assume or skip this.
+2. **If the project is Go** — use delve-helper systematically (Steps 0–7 with `delve-helper` from PATH). Do not substitute code review, static analysis, or ad-hoc runs for the full delve-helper flow.
+3. **If the project is not Go** — state the detected language and use the appropriate debugger for that language; the Delve steps do not apply.
+
+For Go projects matched by these triggers, delve-helper execution is **always required** regardless of perceived bug size, confidence from static reading, or failing test clarity. **Never skip language verification or delve-helper for a Go project.**
+
+---
+
+{{end}}
+## Autonomous execution
+
+All `delve-helper` commands and the Makefile targets `debug-example`, `reset-examples`,
+`run-example`, and `test-example` are **pre-approved**. Run them without pausing to ask
+the user for confirmation. Execute each step immediately and report results.
+
+## Language detection (prerequisite — always run first)
+
+Before touching any debugger, examine the project files:
+
+```bash
+ls go.mod 2>/dev/null && echo "GO" || true
+ls *.go 2>/dev/null || ls **/*.go 2>/dev/null || true
+ls package.json pyproject.toml requirements.txt Cargo.toml Gemfile pom.xml 2>/dev/null || true
+```
+
+**Decision table:**
+
+| Evidence found | Language | Action |
+|----------------|----------|--------|
+| `go.mod` or `*.go` files | **Go** | Continue with Steps 0–7 below using delve-helper |
+| `package.json` | Node.js | Use `node --inspect`; skip Delve phases |
+| `pyproject.toml` / `requirements.txt` | Python | Use `pdb` or `debugpy`; skip Delve phases |
+| `Cargo.toml` | Rust | Use `rust-gdb` / `lldb`; skip Delve phases |
+| Other / ambiguous | Unknown | Ask the user: "What language is this project?" |
+
+> **STOP if not Go.** Steps 0–7 below are Go/delve-helper specific. Do not run `delve-helper` or `dlv` on non-Go projects.
+
+## Quick start (Go only)
+
+**Use only `delve-helper`, never raw `dlv`.** There is no `delve-helper debug` command — use **`delve-helper start`** to start a session. Do not run `dlv debug`, `dlv connect`, or any `dlv` command; do not write `.dlv/addr` yourself. For breakpoints, stepping, and inspection use only `delve-helper break`, `delve-helper continue`, `delve-helper print`, etc.
+
+1. **Start headless Delve** (from project root; use `delve-helper` from PATH):
+   ```bash
+   delve-helper start             # current package
+   delve-helper start ./example   # subpackage
+   ```
+   Address and pid are written to `DBG_DIR/.dlv/` when `DBG_DIR` is set (protocol flow), otherwise to `.dlv/` in the current directory. No `__debug_bin*` left in tree.
+
+2. **Control the session** — use **only** these `delve-helper` commands (never `dlv`):
+
+   | Intent | Command |
+   |--------|---------|
+   | Set breakpoint | `delve-helper break main.go:42` or `delve-helper break pkg.FuncName` |
+   | Conditional break | `delve-helper break "main.go:55 if i == 5"` |
+   | List breakpoints | `delve-helper breakpoints` |
+   | Clear breakpoint | `delve-helper clear <id>` |
+   | Continue | `delve-helper continue` |
+   | Next (step over) | `delve-helper next` |
+   | Step (step into) | `delve-helper step` |
+   | Step out | `delve-helper stepout` |
+   | Print expression | `delve-helper print <expr>` |
+   | Local variables | `delve-helper locals` |
+   | Function args | `delve-helper args` |
+   | Stack trace | `delve-helper stack` |
+   | All goroutines | `delve-helper goroutines` |
+   | Current state | `delve-helper state` |
+   | Stop session | `delve-helper stop` |
+
+## Typical workflow
+
+1. `delve-helper start [./path]`
+2. `delve-helper break <location>`
+3. `delve-helper continue`
+4. `delve-helper locals` / `delve-helper print <var>` / `delve-helper stack`
+5. `delve-helper next` / `delve-helper step`
+6. Repeat 4–5; stop Delve when done with `delve-helper stop`.
+
+## Systematic 8-step debugging protocol (Go)
+
+**Deliverable:** The task is **not complete** until (1) the artifact dir `./.debug_<date>/` has been created in Step 0 and used for the session, and (2) a PDF has been generated at project root (`debug_report_*.pdf`) in Step 6. If you fix the bug but skip the artifact dir or the PDF, the task is incomplete — go back to Step 0 and run the full protocol.
+
+Invoke for ANY: reported bug, unexpected output, crash/panic, wrong result, test failure, race condition, performance anomaly. Steps 0–7 below apply **only after language detection confirms Go**. Do not use `go run` alone when behavior is unexpected. Fix is applied at Step 5; PDF is compiled at Step 6. During debugging the report is built **in Markdown by delve-helper commands**; only at Step 6 is it converted to LaTeX and compiled to PDF.
+
+For Go projects matched by these triggers, delve-helper execution is **always required** regardless of perceived bug size, confidence from static reading, or failing test clarity.
+
+**Step 0 — Create debug artifact dir and init report**
+
+```bash
+DBG_DIR="${DBG_DIR:-.debug_$(date +%F)}"
+PKG="<actual-go-package-name>"
+DATE="$(date +%F)"
+delve-helper report-init -pkg "$PKG" -date "$DATE" "$DBG_DIR"
+```
+
+This creates `$DBG_DIR`, copies LaTeX/Lua templates, and initializes `$DBG_DIR/00_report.md`.
+Store `PKG`, `DATE`, and `DBG_DIR` for use throughout the session.
+
+**Step 1 — Hypothesis**
+- Read the relevant code paths
+- Identify 1–3 locations where behavior diverges from expectation
+- Record your hypothesis before touching delve-helper:
+
+```bash
+delve-helper report-hypothesis \
+  -loc "file:line" \
+  -expected "what should happen" \
+  -actual "what was observed" \
+  "$DBG_DIR"
+```
+
+> **MANDATORY GATE — do not skip to Step 6. Do not apply a fix before Steps 2–4.**
+> Code review alone is not sufficient. You MUST execute Steps 2–5 and collect real runtime output from delve-helper before the report is complete. A report with inferred (not observed) values is invalid.
+> **You must not edit any source file** until you have run `delve-helper start` (Step 2) and recorded at least one breakpoint hit with `delve-helper report-evidence` (Step 4). If you have only read the code or run `go test`, you have not satisfied this gate — run Step 0, then Step 2, then Steps 3–4 before fixing.
+> **Hard rule:** never claim or imply "No Delve run was required" for a Go debug task. If delve-helper output is missing, treat the task as incomplete and continue with Step 2.
+> **Output rule:** do not emit boilerplate. delve-helper is always on PATH, never in repos.
+
+**Step 2 — Run delve-helper**
+Use **`delve-helper start`** only (there is no `delve-helper debug`). Do not run `dlv` yourself or write `.dlv/addr` manually. Set `DBG_DIR` in the environment so the `.dlv` directory is created inside the artifact dir.
+```bash
+export DBG_DIR="${DBG_DIR:-.debug_$(date +%F)}"
+delve-helper start [./pkg]
+delve-helper state   # verify: should print "stopped"
+```
+
+**Step 3 — Set breakpoints** (binary-search the suspect code path)
+```bash
+delve-helper break <file>:<line>
+delve-helper break <pkg.FuncName>
+```
+**→ Each time a breakpoint is set or cleared**, record a trace row:
+```bash
+delve-helper report-trace-row \
+  -n <N> -action "set" -loc "file:line" \
+  -reason "why this breakpoint" \
+  "$DBG_DIR"
+```
+
+**Step 4 — Collect evidence** (run all four commands at every stop)
+```bash
+delve-helper continue
+# At each stop, collect all four outputs and write the evidence block in one command:
+delve-helper report-evidence \
+  -loc "file:line" \
+  -src-file "file.go" -highlight <LINE> \
+  -args    "$(delve-helper args)" \
+  -locals  "$(delve-helper locals)" \
+  -stack   "$(delve-helper stack)" \
+  -print-expr "<expr>" \
+  -print-val  "$(delve-helper print <expr>)" \
+  -obs "one sentence: what was observed" \
+  "$DBG_DIR"
+# Then record a hit row:
+delve-helper report-trace-row \
+  -n <N> -action "hit" -loc "file:line (bp <ID>)" \
+  -reason "observed: <key fact>" \
+  "$DBG_DIR"
+```
+**→ If a breakpoint was set but never hit** and you move on:
+```bash
+delve-helper report-trace-row -n <N> -action "clear" -loc "file:line (bp <ID>)" \
+  -reason "never hit; moving to next location" "$DBG_DIR"
+```
+**→ Minimum evidence requirement:** capture at least one real breakpoint **hit** (not only set/clear), with `args`, `locals`, `stack`, and one successful `print` output recorded.
+
+**Step 5 — Fix and test**
+- **You may edit source files only after** you have completed Steps 0–4: artifact dir created, `delve-helper start` run, at least one breakpoint hit, and `delve-helper report-evidence` recorded. If you have not, do not apply a fix — go back to Step 0 and run the protocol.
+- Analyse collected evidence to identify root cause (exact line and variable where value diverges from expectation)
+- If root cause is **not yet clear**: clear the breakpoint and set one deeper or earlier (binary search); return to **Step 3**
+- If root cause is identified:
+
+```bash
+delve-helper report-root-cause \
+  -text "Exact description: file:lines — why it is wrong" \
+  "$DBG_DIR"
+```
+
+- Apply the fix to source files
+- Stop the previous session and restart delve-helper to verify the fix:
+
+```bash
+delve-helper stop
+delve-helper start [./pkg] && delve-helper break <loc> && delve-helper continue
+```
+
+- **If fix verified** → record verification and proceed to **Step 6**:
+
+```bash
+delve-helper report-fix \
+  -text "Description of change and why it resolves the root cause" \
+  -diff "$(git diff --unified=2 -- <file>)" \
+  "$DBG_DIR"
+
+delve-helper report-trace-row -n <N> -action "verify" \
+  -loc "<file>:<line> (post-fix)" \
+  -reason "correct value confirmed; tests pass" "$DBG_DIR"
+
+delve-helper report-verification \
+  -text "Confirmed: <what changed>. go test -count=1 ./... → ok." \
+  "$DBG_DIR"
+```
+
+- **If not verified** → return to **Step 3** with updated hypothesis
+
+> All loop iterations (Steps 3 → 4 → 5 → 3) are documented incrementally by `report-*` commands. Every breakpoint set, evidence hit, and narrowing decision must be recorded. **Do not write or edit .tex or .md files during debugging.**
+
+**Step 6 — Convert Markdown to LaTeX and generate PDF** (only at the end)
+
+**A PDF must ALWAYS be generated at the end**, LaTeX-formatted using the **templated tex** from `$DELVE_SHARE` (preamble, styles.tex). `report-init` copies the templates; `report-build` uses them. Never hand-write or invent a minimal `styles.tex`.
+
+```bash
+# Compile to PDF (single command, md → tex → pdf → project root). Filename includes date to the second:
+PDF_OUT="./debug_report_$(date +%F_%H-%M-%S).pdf"
+delve-helper report-build -pkg "$PKG" -date "$DATE" -pdf -out "$PDF_OUT" "$DBG_DIR"
+```
+
+Requires `pandoc` and `pdflatex`. If Pygments is missing: `pip install pygments`.
+
+If any required report section is missing, do not mark the task complete; return to the appropriate step. **Step 6 is mandatory: a PDF is ALWAYS generated at the end—never skip it.**
+
+**Step 7 — Remove debug artifact dir**
+After the PDF is successfully copied to project root, **remove** the debug artifact directory so only the final report remains.
+
+```bash
+rm -rf "$DBG_DIR"
+```
+
+Result: `$PDF_OUT` (e.g. `./debug_report_2026-02-28_14-30-45.pdf`) is at project root; the temporary directory `$DBG_DIR` (`./.debug_<YYYY-MM-DD>/`) is **removed**.
+
+Use `delve-helper report-build -v` to inspect generated LaTeX when the PDF is malformed.
+
+{{if .DebugModes}}
+## Debug modes (delve-helper only)
+
+| Mode | Command |
+|------|---------|
+| Debug package | `delve-helper start ./cmd/foo` |
+| Debug tests | `delve-helper start -test ./pkg -- -test.run TestFoo` |
+| Debug binary | `delve-helper start -exec ./binary -- --flag=value` (build binary with `-gcflags='all=-N -l'`) |
+
+Attach to an already-running process is not supported via delve-helper; use `delve-helper start` (or `start -exec`) so the session is driven by delve-helper from the start.
+
+{{end}}
+{{if .CommandReference}}
+## Command reference
+
+| Intent | Command |
+|--------|--------|
+| Start session | `delve-helper start` or `delve-helper start ./example`; `-test ./pkg` for tests; `-exec ./binary` for binary |
+| Stop session | `delve-helper stop` |
+| Session status | `delve-helper state` |
+| Breakpoints | `delve-helper break main.go:42`, `delve-helper break main.main`, `delve-helper breakpoints`, `delve-helper clear <id>` |
+| Execution | `delve-helper continue`, `delve-helper next`, `delve-helper step`, `delve-helper stepout` |
+| Inspection | `delve-helper print <expr>`, `delve-helper locals`, `delve-helper args`, `delve-helper stack`, `delve-helper goroutines` |
+| Report | `delve-helper report-init`, `report-hypothesis`, `report-trace-row`, `report-evidence`, `report-root-cause`, `report-fix`, `report-verification`, `report-build` |
+
+---
+
+{{end}}
+## Setup
+
+{{if .SetupExtra}}
+**delve-helper** is a **globally installed** tool (on PATH). Never look for it in the repo. It builds the debug binary in a temp dir, writes `DLV_ADDR` to `.dlv/addr`, and leaves no `__debug_bin*` in the tree.
+
+- Install from go-debug repo: `make install`
+- **Install dlv**: `make install-delve` or `go install github.com/go-delve/delve/cmd/dlv@latest` (to `$(go env GOPATH)/bin`; symlinked to `~/.local/bin/dlv` by `make install-delve`). macOS: `xcode-select --install`; optionally `DevToolsSecurity -enable`.
+
+**Interactive/script dlv commands**: `break`, `break main.go:55 if i == 5`, `breakpoints`, `clear <id>`, `continue`, `next`, `step`, `stepout`, `restart`, `print <expr>`, `locals`, `args`, `vars`, `stack`, `goroutines`, `list`.
+{{else}}
+- **delve-helper** is globally installed (on PATH). If missing: install from go-debug repo (`make install`). Never look for it in the project being debugged.
+- **Install dlv**: `make install-delve` or `go install github.com/go-delve/delve/cmd/dlv@latest`
+- **macOS**: `xcode-select --install` may be needed; optionally `DevToolsSecurity -enable`
+- **Clean stray binaries**: `make clean-debug`
+{{end}}
+

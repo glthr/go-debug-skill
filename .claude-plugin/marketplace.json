@@ -1,7 +1,7 @@
 {
   "name": "go-debug-skill",
   "owner": {
-    "name": "glthr"
+    "name": "Guillaume Lethuillier"
   },
   "metadata": {
     "description": "Go debugging skill for AI agents — interactive Delve breakpoints, runtime inspection, bug fixing, and PDF report generation"
@@ -12,7 +12,7 @@
       "source": "./",
       "description": "Use when the user wants to debug a program, set breakpoints, step through code, inspect variables, or trace a bug in a running process. Examples: 'debug this program', 'set a breakpoint at line 42', 'why is this crashing', 'step through this function', 'inspect variable x', 'run with the debugger'. Detects language automatically; uses delve-helper for Go projects.",
       "author": {
-        "name": "glthr"
+        "name": "Guillaume Lethuillier"
       },
       "homepage": "https://github.com/glthr/go-debug-skill",
       "repository": "https://github.com/glthr/go-debug-skill",

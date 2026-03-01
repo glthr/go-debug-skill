@@ -64,9 +64,13 @@ install-pdflatex:
 	fi
 
 # Install Pygments (Python package required by minted for syntax highlighting).
+# On macOS: tries brew first, falls back to pip3/pip.
 install-pygments:
 	@if command -v pygmentize >/dev/null 2>&1; then \
 		echo "pygments already installed: $$(pygmentize --version 2>/dev/null || echo ok)"; \
+	elif [ "$(OS_TYPE)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then \
+		echo "Installing pygments via Homebrew..."; \
+		brew install pygments; \
 	elif command -v pip3 >/dev/null 2>&1; then \
 		echo "Installing pygments via pip3..."; \
 		pip3 install pygments; \

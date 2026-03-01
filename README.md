@@ -14,7 +14,7 @@ An AI agent skill that interactively debugs Go programs using breakpoints, inspe
 
 - **Interactive debugging with breakpoints** — the agent sets and clears breakpoints using a binary-search strategy, steps through execution, and collects runtime evidence (`args`, `locals`, `stack`, `print`) at each stop.
 - **Bug fixing** — root cause is identified from collected evidence, a fix is applied, and Delve is re-run to verify. The loop repeats until all tests pass.
-- **PDF report generation** — a structured Markdown report is built incrementally (hypothesis → trace table → evidence blocks → root-cause box → fix box) and compiled to PDF via Pandoc + pdflatex + Pygments.
+- **PDF report generation** — a structured Markdown report is built incrementally (hypothesis → trace table → evidence blocks → root-cause box → fix box) and compiled to PDF via Pandoc + pdflatex + Pygments. You can disable PDF by setting `DELVE_SKIP_PDF=1` or by asking (e.g. "no PDF", "debug without PDF"); the report then remains in the artifact dir as Markdown and LaTeX.
 
 Multiple AI agents are supported via their native skill/rule mechanism. All agents follow the same 8-step debugging protocol and produce the same PDF report.
 
@@ -111,7 +111,7 @@ make test-e2e   # full cycle: reset → 3 Delve sessions → fix → PDF → ass
 
 `examples/templates/` holds pristine snapshots for `make reset-examples`; avoid editing them by mistake. Optional safeguards:
 
-- **`make install-hooks`** — installs a git pre-commit hook that blocks commits touching `examples/templates/` unless you set `ALLOW_TEMPLATE_CHANGES=1`.
+- **`make install-hooks`** — installs a git pre-commit hook that runs the template check (blocks commits touching `examples/templates/` unless `ALLOW_TEMPLATE_CHANGES=1`) and `go vet ./...` (lint).
 - **`make check-templates`** — fails if there are uncommitted changes under `examples/templates/` (e.g. in CI or before release).
 
 ## How it works

@@ -18,7 +18,7 @@ CODEX_SKILLS_DEST := $(DESTDIR)$(CODEX_SKILLS_DIR)
 TEMPLATE_DIR  ?= $(HOME)/.local/share/delve-debug
 TEMPLATE_DEST := $(DESTDIR)$(TEMPLATE_DIR)
 
-.PHONY: install install-deps install-pandoc install-pdflatex install-pygments install-delve install-delve-helper install-rules install-skill install-codex-skill install-template uninstall uninstall-delve uninstall-delve-helper uninstall-rules uninstall-skill uninstall-codex-skill uninstall-template delve-helper generate-skills skills check-templates install-hooks debug-example debug-example-crash clean-debug reset-examples reset-example-crash run-example run-example-crash test-example test-e2e
+.PHONY: install install-deps install-pandoc install-pdflatex install-pygments install-delve install-delve-helper install-rules install-skill install-codex-skill install-template uninstall uninstall-delve uninstall-delve-helper uninstall-rules uninstall-skill uninstall-codex-skill uninstall-template delve-helper generate-skills skills check-templates install-hooks lint debug-example debug-example-crash clean-debug reset-examples reset-example-crash run-example run-example-crash test-example test-e2e
 
 # 1) skills → generate into skills/out/  2) install-* → copy skills/out/... to ~/.cursor/rules, ~/.claude/skills, ~/.codex/skills
 install: skills install-deps install-delve install-delve-helper install-rules install-skill install-codex-skill install-template
@@ -95,12 +95,16 @@ skills:
 check-templates:
 	@./scripts/check-templates-unchanged.sh
 
-# Install git hooks so commits that modify examples/templates/ are blocked unless ALLOW_TEMPLATE_CHANGES=1.
+# Run Go linter (used by pre-commit hook and CI).
+lint:
+	@go vet ./...
+
+# Install git hooks: pre-commit runs template check + lint (blocks commit on failure).
 install-hooks:
 	@mkdir -p .git/hooks
 	@cp .githooks/pre-commit .git/hooks/pre-commit
 	@chmod +x .git/hooks/pre-commit
-	@echo "Installed .git/hooks/pre-commit (blocks accidental changes to examples/templates/)"
+	@echo "Installed .git/hooks/pre-commit (template check + go vet ./...)"
 
 # Start headless Delve for ./examples/failing_test (--accept-multiclient, address in .dlv/addr). Use with delve-helper break/continue/print etc.
 debug-example: delve-helper

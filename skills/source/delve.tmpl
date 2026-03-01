@@ -18,7 +18,7 @@ If the user asked to **debug**, **fix**, **trace**, or **investigate** a program
 **DO:**
 - Create the artifact dir (Step 0) and run Steps 0–7 in order
 - Use delve-helper to collect runtime evidence BEFORE applying any fix
-- Produce the PDF at Step 6; the task is **incomplete** until `./.debug_<date>/` exists and `debug_report_*.pdf` is at project root
+- Complete Step 6 (report build; PDF unless disabled); the task is **incomplete** until `./.debug_<date>/` exists and either a PDF is at project root or PDF was disabled (env or user request)
 
 > **Zero-tolerance rule:** Static analysis alone is never sufficient for a Go debug task. Even if the root cause is visible in source, delve-helper MUST confirm it at runtime. A fix applied without Delve evidence is a protocol violation — treat the task as incomplete and restart from Step 2.
 
@@ -39,7 +39,7 @@ If the user asked to **debug**, **fix**, **trace**, or **investigate** a program
 ---
 
 {{end}}
-**You must run the full 8-step protocol for every Go debug task:** create the artifact dir (Step 0), run `delve-helper start` (Step 2), set breakpoints and collect evidence (Steps 3–4), then and only then apply a fix (Step 5) and generate the PDF (Step 6). Never fix the code based only on reading it or on `go test` output — that skips the protocol.
+**You must run the full 8-step protocol for every Go debug task:** create the artifact dir (Step 0), run `delve-helper start` (Step 2), set breakpoints and collect evidence (Steps 3–4), then and only then apply a fix (Step 5) and complete Step 6 (report build; PDF unless disabled). Never fix the code based only on reading it or on `go test` output — that skips the protocol.
 
 Detect the project language first, then apply the appropriate debugger. For Go projects, use **delve-helper** (globally installed on PATH). Never use `go run`/`go test` alone when the user wants to inspect execution. **delve-helper is never in the repo** — do not look for it there.
 
@@ -141,9 +141,9 @@ ls package.json pyproject.toml requirements.txt Cargo.toml Gemfile pom.xml 2>/de
 
 ## Systematic 8-step debugging protocol (Go)
 
-**Deliverable:** The task is **not complete** until (1) the artifact dir `./.debug_<date>/` has been created in Step 0 and used for the session, and (2) a PDF has been generated at project root (`debug_report_*.pdf`) in Step 6. If you fix the bug but skip the artifact dir or the PDF, the task is incomplete — go back to Step 0 and run the full protocol.
+**Deliverable:** The task is **not complete** until (1) the artifact dir `./.debug_<date>/` has been created in Step 0 and used for the session, and (2) either a PDF has been generated at project root (`debug_report_*.pdf`) in Step 6 **or** PDF was disabled (see Optional: Disabling PDF). If PDF was disabled, the report remains in the artifact dir. If you fix the bug but skip the artifact dir or skip Step 6 entirely, the task is incomplete — go back to Step 0 and run the full protocol.
 
-Invoke for ANY: reported bug, unexpected output, crash/panic, wrong result, test failure, race condition, performance anomaly. Steps 0–7 below apply **only after language detection confirms Go**. Do not use `go run` alone when behavior is unexpected. Fix is applied at Step 5; PDF is compiled at Step 6. During debugging the report is built **in Markdown by delve-helper commands**; only at Step 6 is it converted to LaTeX and compiled to PDF.
+Invoke for ANY: reported bug, unexpected output, crash/panic, wrong result, test failure, race condition, performance anomaly. Steps 0–7 below apply **only after language detection confirms Go**. Do not use `go run` alone when behavior is unexpected. Fix is applied at Step 5; at Step 6 the report is converted to LaTeX and optionally compiled to PDF. During debugging the report is built **in Markdown by delve-helper commands**; only at Step 6 is it converted to LaTeX and, unless disabled, compiled to PDF.
 
 For Go projects matched by these triggers, delve-helper execution is **always required** regardless of perceived bug size, confidence from static reading, or failing test clarity.
 
@@ -157,7 +157,7 @@ delve-helper report-init -pkg "$PKG" -date "$DATE" "$DBG_DIR"
 ```
 
 This creates `$DBG_DIR`, copies LaTeX/Lua templates, and initializes `$DBG_DIR/00_report.md`.
-Store `PKG`, `DATE`, and `DBG_DIR` for use throughout the session.
+Store `PKG`, `DATE`, and `DBG_DIR` for use throughout the session. At the start of the protocol, set `SKIP_PDF=1` if PDF is disabled (see **Optional: Disabling PDF** below); otherwise leave it unset so Steps 6 and 7 generate the PDF and remove the artifact dir.
 
 **Step 1 — Hypothesis**
 - Read the relevant code paths
@@ -267,28 +267,38 @@ delve-helper report-verification \
 
 > All loop iterations (Steps 3 → 4 → 5 → 3) are documented incrementally by `report-*` commands. Every breakpoint set, evidence hit, and narrowing decision must be recorded. **Do not write or edit .tex or .md files during debugging.**
 
-**Step 6 — Convert Markdown to LaTeX and generate PDF** (only at the end)
+**Optional: Disabling PDF** — PDF generation is **disabled** when (1) the environment variable `DELVE_SKIP_PDF` is set (e.g. to `1`, `true`, or `yes`), or (2) the user asked to skip or omit the PDF (e.g. "without PDF", "no PDF", "skip the report PDF"). When disabled, set `SKIP_PDF=1` at the start of the protocol; do not run `report-build` with `-pdf` at Step 6; leave the artifact dir in place at Step 7 so the report remains in `$DBG_DIR`.
 
-**A PDF must ALWAYS be generated at the end**, LaTeX-formatted using the **templated tex** from `$DELVE_SHARE` (preamble, styles.tex). `report-init` copies the templates; `report-build` uses them. Never hand-write or invent a minimal `styles.tex`.
+**Step 6 — Convert Markdown to LaTeX (and optionally PDF)** (only at the end)
+
+Convert the report to LaTeX using the **templated tex** from `$DELVE_SHARE` (preamble, styles.tex). `report-init` copies the templates; `report-build` uses them. Never hand-write or invent a minimal `styles.tex`. If PDF is **not** disabled, also compile to PDF and copy to project root; if PDF **is** disabled, run `report-build` without `-pdf` so only the `.tex` is produced in `$DBG_DIR`. `pandoc` is always used; `pdflatex` is only required when generating the PDF.
 
 ```bash
-# Compile to PDF (single command, md → tex → pdf → project root). Filename includes date to the second:
+# If PDF is not disabled (SKIP_PDF not set):
 PDF_OUT="./debug_report_$(date +%F_%H-%M-%S).pdf"
 delve-helper report-build -pkg "$PKG" -date "$DATE" -pdf -out "$PDF_OUT" "$DBG_DIR"
+# Then set GENERATED_PDF=1 for Step 7.
+
+# If PDF is disabled (SKIP_PDF=1):
+delve-helper report-build -pkg "$PKG" -date "$DATE" "$DBG_DIR"
+# Do not set GENERATED_PDF; leave artifact dir in place at Step 7.
 ```
 
-Requires `pandoc` and `pdflatex`. If Pygments is missing: `pip install pygments`.
+Requires `pandoc`; `pdflatex` only when generating PDF. If Pygments is missing: `pip install pygments`.
 
-If any required report section is missing, do not mark the task complete; return to the appropriate step. **Step 6 is mandatory: a PDF is ALWAYS generated at the end—never skip it.**
+If any required report section is missing, do not mark the task complete; return to the appropriate step.
 
-**Step 7 — Remove debug artifact dir**
-After the PDF is successfully copied to project root, **remove** the debug artifact directory so only the final report remains.
+**Step 7 — Remove debug artifact dir (only when PDF was generated)**
+If a PDF was generated in Step 6, **remove** the debug artifact directory so only the final PDF remains at project root. If PDF was skipped (see Optional: Disabling PDF), **leave** the artifact dir so the report (Markdown and LaTeX) remains in `$DBG_DIR`.
 
 ```bash
+# Only when PDF was generated (GENERATED_PDF=1 or PDF_OUT was written):
 rm -rf "$DBG_DIR"
+
+# When PDF was disabled: do not remove $DBG_DIR; the report is in $DBG_DIR (e.g. .debug_<date>/).
 ```
 
-Result: `$PDF_OUT` (e.g. `./debug_report_2026-02-28_14-30-45.pdf`) is at project root; the temporary directory `$DBG_DIR` (`./.debug_<YYYY-MM-DD>/`) is **removed**.
+Result when PDF was generated: `$PDF_OUT` (e.g. `./debug_report_2026-02-28_14-30-45.pdf`) is at project root; `$DBG_DIR` is **removed**. Result when PDF was disabled: `$DBG_DIR` (e.g. `./.debug_<YYYY-MM-DD>/`) remains and contains `00_report.md`, other `.md` fragments, and `debug_report.tex`.
 
 Use `delve-helper report-build -v` to inspect generated LaTeX when the PDF is malformed.
 
